@@ -236,6 +236,28 @@
   .tabbar button .ic{display:grid;place-items:center;line-height:0} .tabbar button .ic svg{width:22px;height:22px}
   .tabbar button.on{color:var(--white);background:var(--orange);box-shadow:0 0 18px rgba(255,72,0,.4)}
 
+  /* groups */
+  .gchips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin:0 -2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .gchips::-webkit-scrollbar{display:none}
+  .gchip{flex:0 0 auto;min-height:44px;padding:0 16px;border-radius:var(--r-pill);background:var(--s5);border:1px solid var(--line2);color:var(--white);
+    font-size:14px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+  .gchip small{color:var(--steel);font-weight:500;font-size:12px}
+  .gchip.on{background:var(--white);color:var(--void);border-color:var(--white)} .gchip.on small{color:#555}
+  .gchip.add{border-style:dashed;color:var(--silver)}
+  .gpick{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .gpick .lbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--fog);margin-right:2px}
+  .gpick .gchip{min-height:38px;padding:0 14px;font-size:13px}
+  .gpick .gchip.on{background:var(--orange);border-color:var(--white);color:var(--white)}
+  .pcard .pmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .pcard .pmain .nm{flex:none}
+  .gtags{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0;cursor:pointer}
+  .gtag{background:var(--s10);border:1px solid var(--line);color:var(--silver);border-radius:var(--r-pill);font-size:11px;font-weight:500;padding:2px 9px;line-height:1.5}
+  .gtag.add{border-style:dashed;color:var(--steel);background:transparent}
+  .sheettitle{font-family:var(--font-display);font-size:20px;font-weight:400;letter-spacing:-.3px;margin-bottom:14px;text-align:left}
+  .gtoggle{width:100%;min-height:52px;display:flex;align-items:center;justify-content:space-between;background:var(--s5);border:1px solid var(--line2);color:var(--white);
+    border-radius:var(--r-card);padding:0 16px;font-size:15px;font-weight:500;margin-bottom:8px;cursor:pointer;text-align:left}
+  .gtoggle .chk{width:24px;height:24px;border-radius:50%;border:1px solid var(--line2);display:grid;place-items:center;font-size:13px;flex:0 0 auto}
+  .gtoggle.on{border-color:var(--orange)} .gtoggle.on .chk{background:var(--orange);border-color:var(--white)}
   .toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:rgba(10,10,10,.92);
     border:1px solid var(--line2);color:var(--white);padding:11px 18px;border-radius:var(--r-pill);font-size:13px;font-weight:500;opacity:0;transition:.25s;
     pointer-events:none;z-index:70;max-width:calc(100% - 32px);text-align:center}
@@ -264,12 +286,18 @@
 
   <!-- ROSTER -->
   <section id="rosterView">
+    <h2 class="sec" style="margin-top:8px"><span>Playing today</span><span id="groupSub" class="subtle"></span></h2>
+    <div class="gchips" id="gchips"></div>
+    <div class="tools hidden" id="groupTools" style="margin-top:6px">
+      <button class="tool" id="grpRename">Rename group</button><button class="tool warn" id="grpDelete">Delete group</button>
+    </div>
     <h2 class="sec"><span>Players</span><span id="rosterCount" class="subtle"></span></h2>
     <div class="addrow">
       <button id="addAvatarBtn" class="addav">📷</button>
       <input id="addName" placeholder="Add a player…" maxlength="16" autocomplete="off">
       <button id="addBtn" class="addbtn">Add</button>
     </div>
+    <div class="gpick hidden" id="gpick"></div>
     <div class="plist" id="plist"></div>
     <div class="empty hidden" id="rosterEmpty">No players yet.<br>Tap 📷 to snap a photo, type a name, then Add.</div>
     <h2 class="sec hidden" id="rosterToolsHdr"><span>Manage</span></h2>
@@ -377,6 +405,13 @@
     <button class="tool" id="doneBtn">Back to queue</button>
   </div></div>
 
+  <div class="overlay hidden" id="groupSheet"><div class="winbox" style="text-align:left">
+    <div class="sheettitle" id="gsTitle"></div>
+    <div id="gsList"></div>
+    <button class="tool" id="gsNew" style="width:100%">＋ New group</button>
+    <button class="cta" id="gsDone" style="margin-top:12px">Done</button>
+  </div></div>
+
   <div class="toast" id="toast"></div>
   <input type="file" id="photoInput" accept="image/*" capture="user" style="display:none">
 
@@ -393,12 +428,13 @@
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const KEY="pickle_openplay_v3";
 
-let DB={ players:[], bench:[], courts:[{t1:[],t2:[]}], cfg:{mode:"doubles",courts:1}, matches:0, session:null, sessions:[] };
+let DB={ players:[], bench:[], courts:[{t1:[],t2:[]}], cfg:{mode:"doubles",courts:1}, matches:0, session:null, sessions:[], groups:[], activeGroup:null };
 function load(){
   try{const r=JSON.parse(localStorage.getItem(KEY)); if(r&&r.players){DB=Object.assign(DB,r);} }catch(e){}
   if(!Array.isArray(DB.courts)||!DB.courts.length) DB.courts=[{t1:[],t2:[]}];
   if(!Array.isArray(DB.sessions)) DB.sessions=[];
   if(DB.session && !DB.session.stats) DB.session=null;
+  if(!Array.isArray(DB.groups)) DB.groups=[]; if(DB.activeGroup&&!DB.groups.some(g=>g.id===DB.activeGroup)) DB.activeGroup=null;
   DB.cfg.courts=DB.courts.length;
 }
 /* ---- cloud sync (Supabase, isolated pickle_* objects; local-first, last-write-wins) ---- */
@@ -429,11 +465,12 @@ function normalize(){
   if(!Array.isArray(DB.players)) DB.players=[]; if(!Array.isArray(DB.bench)) DB.bench=[];
   if(!Array.isArray(DB.courts)||!DB.courts.length) DB.courts=[{t1:[],t2:[]}];
   if(!Array.isArray(DB.sessions)) DB.sessions=[]; if(DB.session&&!DB.session.stats) DB.session=null;
+  if(!Array.isArray(DB.groups)) DB.groups=[]; if(DB.activeGroup&&!DB.groups.some(g=>g.id===DB.activeGroup)) DB.activeGroup=null;
   if(!DB.cfg) DB.cfg={mode:"doubles",courts:1}; DB.cfg.courts=DB.courts.length;
 }
 function applyCloud(data,ms){
   applying=true;
-  DB=Object.assign({players:[],bench:[],courts:[{t1:[],t2:[]}],cfg:{mode:"doubles",courts:1},matches:0,session:null,sessions:[]},data);
+  DB=Object.assign({players:[],bench:[],courts:[{t1:[],t2:[]}],cfg:{mode:"doubles",courts:1},matches:0,session:null,sessions:[],groups:[],activeGroup:null},data);
   normalize(); benchClean(); save(); applying=false;
   cloudAt=ms; LS("pickle_cloud_at",String(ms)); dirty=false; LS("pickle_dirty","0");
   if(curView!=="gameView") showView(curView);
@@ -522,22 +559,80 @@ function showView(name){
 $$("#tabbar button").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
 
 /* roster */
+/* groups: usual players per day; the active group decides who is in today's queue */
+let pendingGroups=[], sheetPid=null;
+const pg=p=>p.groups||(p.groups=[]);
+const gname=id=>{ const g=DB.groups.find(x=>x.id===id); return g?g.name:"?"; };
+function isActive(p){ return !DB.activeGroup||pg(p).includes(DB.activeGroup); }
+function syncActive(){
+  const act=new Set(DB.players.filter(isActive).map(p=>p.id));
+  DB.courts.forEach(c=>{ c.t1=c.t1.filter(id=>act.has(id)); c.t2=c.t2.filter(id=>act.has(id)); });
+  DB.bench=DB.bench.filter(id=>act.has(id));
+  const placed=new Set([...allSel(),...DB.bench]);
+  DB.players.forEach(p=>{ if(act.has(p.id)&&!placed.has(p.id)) DB.bench.push(p.id); });
+}
+function newGroup(){
+  const n=prompt("Group name (e.g. Tuesday crew):"), name=(n||"").trim(); if(!name) return null;
+  if(DB.groups.some(g=>g.name.toLowerCase()===name.toLowerCase())){ toast("That group already exists"); return null; }
+  const g={id:"g"+(_id++),name}; DB.groups.push(g); save(); return g;
+}
+function setActive(id){
+  DB.activeGroup=id||null; pendingGroups=id?[id]:[]; syncActive(); save(); renderRoster();
+  const n=DB.players.filter(isActive).length;
+  toast(id?(n?`Playing today: ${gname(id)} (${n})`:`${gname(id)} has no players yet`):"Everyone is playing");
+}
+function renderGroups(){
+  const box=$("#gchips"); box.innerHTML="";
+  const mk=(label,count,on,fn,cls)=>{ const b=document.createElement("button"); b.className="gchip"+(on?" on":"")+(cls?" "+cls:"");
+    b.innerHTML=count==null?esc(label):`${esc(label)} <small>${count}</small>`; b.onclick=fn; box.appendChild(b); };
+  mk("All players",DB.players.length,!DB.activeGroup,()=>setActive(null));
+  DB.groups.forEach(g=>mk(g.name,DB.players.filter(p=>pg(p).includes(g.id)).length,DB.activeGroup===g.id,()=>setActive(g.id)));
+  mk("＋ Group",null,false,()=>{ const g=newGroup(); if(g){ pendingGroups=[g.id]; renderRoster(); toast("Group created — add players to it"); } },"add");
+  $("#groupTools").classList.toggle("hidden",!DB.activeGroup);
+  $("#groupSub").textContent=DB.activeGroup?`${DB.players.filter(isActive).length} playing`:"";
+  const gp=$("#gpick"); gp.classList.toggle("hidden",!DB.groups.length); gp.innerHTML='<span class="lbl">Add to</span>';
+  DB.groups.forEach(g=>{ const on=pendingGroups.includes(g.id), b=document.createElement("button"); b.className="gchip"+(on?" on":""); b.textContent=g.name;
+    b.onclick=()=>{ pendingGroups=on?pendingGroups.filter(x=>x!==g.id):[...pendingGroups,g.id]; renderGroups(); }; gp.appendChild(b); });
+}
+$("#grpRename").onclick=()=>{ const g=DB.groups.find(x=>x.id===DB.activeGroup); if(!g) return;
+  const n=prompt("Rename group:",g.name); if(n&&n.trim()){ g.name=n.trim(); save(); renderRoster(); } };
+$("#grpDelete").onclick=()=>{ const g=DB.groups.find(x=>x.id===DB.activeGroup); if(!g||!confirm(`Delete group "${g.name}"? Players stay in the roster.`)) return;
+  DB.groups=DB.groups.filter(x=>x!==g); DB.players.forEach(p=>{ p.groups=pg(p).filter(x=>x!==g.id); });
+  DB.activeGroup=null; pendingGroups=pendingGroups.filter(x=>x!==g.id); syncActive(); save(); renderRoster(); };
+function openSheet(pid){ sheetPid=pid; renderSheet(); $("#groupSheet").classList.remove("hidden"); }
+function renderSheet(){
+  const p=P(sheetPid); if(!p) return; $("#gsTitle").textContent=p.name+" — groups";
+  const box=$("#gsList"); box.innerHTML=DB.groups.length?"":'<div class="subtle" style="margin-bottom:12px">No groups yet. Create one, e.g. "Tuesday crew".</div>';
+  DB.groups.forEach(g=>{ const on=pg(p).includes(g.id), b=document.createElement("button"); b.className="gtoggle"+(on?" on":"");
+    b.innerHTML=`<span>${esc(g.name)}</span><span class="chk">${on?"✓":""}</span>`;
+    b.onclick=()=>{ p.groups=on?pg(p).filter(x=>x!==g.id):[...pg(p),g.id]; syncActive(); save(); renderSheet(); renderRoster(); }; box.appendChild(b); });
+}
+$("#gsNew").onclick=()=>{ const g=newGroup(); const p=P(sheetPid); if(g&&p){ p.groups=[...pg(p),g.id]; syncActive(); save(); renderSheet(); renderRoster(); } };
+$("#gsDone").onclick=()=>{ $("#groupSheet").classList.add("hidden"); sheetPid=null; };
+
 function addPlayer(name){ name=(name||"").trim(); if(!name)return;
-  const p={id:uid(),name,photo:pendingPhoto||null,w:0,l:0,g:0,streak:0}; DB.players.push(p); DB.bench.push(p.id);
+  const p={id:uid(),name,photo:pendingPhoto||null,groups:pendingGroups.filter(id=>DB.groups.some(g=>g.id===id)),w:0,l:0,g:0,streak:0};
+  DB.players.push(p); if(isActive(p)) DB.bench.push(p.id); else toast(`${name} added (not in today's group)`);
   pendingPhoto=null; renderAddPreview(); save(); renderRoster(); }
 function removePlayer(id){ DB.players=DB.players.filter(p=>p.id!==id); DB.bench=DB.bench.filter(x=>x!==id);
   DB.courts.forEach(c=>{c.t1=c.t1.filter(x=>x!==id);c.t2=c.t2.filter(x=>x!==id);}); save(); renderRoster(); }
 function renderRoster(){
+  pendingGroups=pendingGroups.filter(id=>DB.groups.some(g=>g.id===id));
+  renderGroups();
   const list=$("#plist"); list.innerHTML="";
-  DB.players.forEach(p=>{ const d=document.createElement("div"); d.className="pcard";
-    d.innerHTML=`${avatar(p)}<span class="nm">${esc(p.name)}</span><span class="rec"><b>${p.w}</b>W · <i>${p.l}</i>L</span><button class="x">✕</button>`;
+  const view=DB.players.filter(isActive);
+  view.forEach(p=>{ const d=document.createElement("div"); d.className="pcard";
+    const tags=pg(p).map(id=>`<span class="gtag">${esc(gname(id))}</span>`).join("")||'<span class="gtag add">＋ group</span>';
+    d.innerHTML=`${avatar(p)}<span class="pmain"><span class="nm">${esc(p.name)}</span><span class="gtags">${tags}</span></span><span class="rec"><b>${p.w}</b>W · <i>${p.l}</i>L</span><button class="x">✕</button>`;
     d.querySelector(".av").onclick=()=>openCamera(p.id);
     d.querySelector(".nm").onclick=()=>{ const n=prompt("Rename player:",p.name); if(n&&n.trim()){p.name=n.trim();save();renderRoster();} };
+    d.querySelector(".gtags").onclick=()=>openSheet(p.id);
     d.querySelector(".x").onclick=()=>{ if(confirm(`Remove ${p.name}?`))removePlayer(p.id); };
     list.appendChild(d); });
-  const n=DB.players.length;
-  $("#rosterCount").textContent=n?`${n} player${n>1?"s":""}`:"";
-  $("#rosterEmpty").classList.toggle("hidden",n>0);
+  const n=DB.players.length, shown=view.length;
+  $("#rosterCount").textContent=n?(DB.activeGroup?`${shown} of ${n}`:`${n} player${n>1?"s":""}`):"";
+  $("#rosterEmpty").innerHTML=n===0?"No players yet.<br>Tap 📷 to snap a photo, type a name, then Add.":"No players in this group yet.<br>Add players below, or tap ＋ group on a player.";
+  $("#rosterEmpty").classList.toggle("hidden",shown>0);
   $("#rosterTools").classList.toggle("hidden",n===0);
   $("#rosterToolsHdr").classList.toggle("hidden",n===0);
 }
